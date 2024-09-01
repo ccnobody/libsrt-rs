@@ -28,9 +28,16 @@ fn compile_srt_lib(){
             .args(&["clone", "https://github.com/Haivision/srt.git", "srt"])
             .status()
             .expect("无法克隆SRT仓库");
+
     } else {
         println!("SRT repository already exists, skipping clone.");
     }
+
+    Command::new("git")
+        .current_dir(&srt_source_path)
+        .args(&["checkout", "v1.5.3"])
+        .status()
+        .expect("无法克隆SRT仓库");
 
     // 编译并安装SRT
     let srt_build_dir = srt_source_path.join("build");
@@ -84,6 +91,8 @@ fn main() {
         .header("wrapper.h")
         .clang_arg(format!("-I{}", srt_include_path.display()))
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        // 忽略 IPPORT_RESERVED 的定义
+        .blocklist_item("IPPORT_RESERVED")
         .generate()
         .expect("无法生成绑定");
 
