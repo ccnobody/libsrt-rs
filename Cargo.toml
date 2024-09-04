@@ -6,5 +6,9 @@ edition = "2021"
 [dependencies]
 os_socketaddr = "0.2.5" # https://github.com/a-ba/os_socketaddr
 libsrt-sys = { path = "libsrt-sys", version = "1.5.3" }
-libc = "0.2"
-futures = "0.3"
+[target.'cfg(unix)'.dependencies]
+nix = "0.29.0"
+[target.'cfg(windows)'.dependencies]
+windows-sys = "0.59.0"
+
+
