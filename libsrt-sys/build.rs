@@ -8,7 +8,7 @@ use tar::Archive;
 fn mkdir()->(PathBuf,PathBuf) {
     // 设置SRT仓库的目标路径和安装路径
     let srt_source_path = PathBuf::from("depends/build");
-    let srt_install_path = PathBuf::from("depends/lib");
+    let srt_install_path = PathBuf::from("depends/srt");
     // 确保目录存在
     fs::create_dir_all(&srt_source_path).expect("Failed to create SRT source directory");
     fs::create_dir_all(&srt_install_path).expect("Failed to create SRT install directory");
@@ -113,6 +113,9 @@ fn main() {
     let  (_, srt_install_path) = mkdir();
     compile_srt_lib();
 
+    println!("cargo:rustc-link-lib=c++");
+    // 或者，如果使用 libc++：
+    // println!("cargo:rustc-link-lib=c++abi");
     // 设置链接路径
     println!("cargo:rustc-link-search=native={}/lib", srt_install_path.to_str().unwrap());
     println!("cargo:rustc-link-lib=static=srt");
@@ -120,6 +123,8 @@ fn main() {
     // 告诉cargo在SRT源码或wrapper.h发生变化时重新运行此脚本
     println!("cargo:rerun-if-changed=depends/build/srt");
     println!("cargo:rerun-if-changed=wrapper.h");
+
+    
 
     // SRT头文件的路径
     let srt_include_path = srt_install_path.join("include");
@@ -145,4 +150,5 @@ fn main() {
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("无法写入绑定");
+
 }
