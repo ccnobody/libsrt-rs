@@ -25,7 +25,7 @@ impl SrtError {
             sys_error_code,
             message: None,
             #[cfg(unix)]
-            unix_error: Some(Errno::from_i32(sys_error_code)),
+            unix_error: Some(Errno::from_raw(sys_error_code)),
             #[cfg(windows)]
             windows_error: Some(sys_error_code as WIN32_ERROR),
         }

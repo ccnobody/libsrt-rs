@@ -1,11 +1,11 @@
-use std::env;
-use std::path::PathBuf;
-use std::fs;
-use std::process::Command;
 use flate2::read::GzDecoder;
+use std::env;
+use std::fs;
+use std::path::PathBuf;
+use std::process::Command;
 use tar::Archive;
 
-fn mkdir()->(PathBuf,PathBuf) {
+fn mkdir() -> (PathBuf, PathBuf) {
     // 设置SRT仓库的目标路径和安装路径
     let srt_source_path = PathBuf::from("depends/build");
     let srt_install_path = PathBuf::from("depends/srt");
@@ -16,7 +16,10 @@ fn mkdir()->(PathBuf,PathBuf) {
     println!("SRT source path: {}", srt_source_path.display());
     println!("SRT install path: {}", srt_install_path.display());
 
-    (srt_source_path.canonicalize().unwrap(),srt_install_path.canonicalize().unwrap())
+    (
+        srt_source_path.canonicalize().unwrap(),
+        srt_install_path.canonicalize().unwrap(),
+    )
 }
 
 fn download_srt_source() -> PathBuf {
@@ -79,17 +82,16 @@ fn compile_srt_lib() {
         .current_dir(&srt_build_dir)
         .args(&[
             "..",
-            &format!("-DCMAKE_INSTALL_PREFIX={}", srt_install_path.to_str().unwrap()),
+            &format!(
+                "-DCMAKE_INSTALL_PREFIX={}",
+                srt_install_path.to_str().unwrap()
+            ),
             "-DENABLE_SHARED=OFF",
             "-DENABLE_STATIC=ON",
             "-DUSE_STATIC_LIBSTDCXX=ON",
             "-DUSE_ENCLIB=openssl",
             "-DENABLE_CXX11=ON",
             "-DCMAKE_POSITION_INDEPENDENT_CODE=ON",
-            // "-DCMAKE_C_FLAGS=-pie",
-            // "-DCMAKE_CXX_FLAGS=-pie",
-            // "-DCMAKE_EXE_LINKER_FLAGS=-pie",
-            // "-DCMAKE_SHARED_LINKER_FLAGS=-pie",
         ])
         .status()
         .expect("CMake配置失败");
@@ -109,22 +111,67 @@ fn compile_srt_lib() {
     println!("SRT 库编译完成");
 }
 
-fn main() {
-    let  (_, srt_install_path) = mkdir();
-    compile_srt_lib();
+fn link_openssl_in_macos() {
+    // 获取OpenSSL的安装路径
+    let output = Command::new("brew")
+        .args(&["--prefix", "openssl@3"])
+        .output()
+        .expect("Failed to execute brew command");
 
+    if !output.status.success() {
+        panic!("Failed to get OpenSSL path from Homebrew");
+    }
+
+    let openssl_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    println!("cargo:rustc-link-search=native={}/lib", openssl_path);
+    println!("cargo:rustc-link-lib=static=crypto");
+    println!("cargo:rustc-link-lib=static=ssl");
+}
+fn link_openssl_in_linux() {
+    let output = Command::new("pkg-config")
+        .args(&["--libs", "--cflags", "openssl"])
+        .output()
+        .expect("Failed to execute pkg-config");
+
+    if output.status.success() {
+        let flags = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        println!("cargo:rustc-flags={}", flags);
+        println!("cargo:warning=Using OpenSSL from pkg-config");
+    } else {
+        // 如果pkg-config失败，尝试使用默认路径
+        println!("cargo:rustc-link-search=native=/usr/lib");
+        println!("cargo:rustc-link-search=native=/usr/lib/x86_64-linux-gnu");
+        println!("cargo:rustc-link-lib=ssl");
+        println!("cargo:rustc-link-lib=crypto");
+        println!("cargo:warning=Using default OpenSSL paths");
+    }
+
+}
+
+fn main() {
+    let (_, srt_install_path) = mkdir();
+    // 编译SRT库
+    compile_srt_lib();
+    // 链接OpenSSL
     println!("cargo:rustc-link-lib=c++");
+    if cfg!(target_os = "macos") {
+        link_openssl_in_macos();
+    } else if cfg!(target_os = "linux") {
+        link_openssl_in_linux();
+    }   
     // 或者，如果使用 libc++：
     // println!("cargo:rustc-link-lib=c++abi");
     // 设置链接路径
-    println!("cargo:rustc-link-search=native={}/lib", srt_install_path.to_str().unwrap());
+    println!(
+        "cargo:rustc-link-search=native={}/lib",
+        srt_install_path.to_str().unwrap()
+    );
     println!("cargo:rustc-link-lib=static=srt");
 
     // 告诉cargo在SRT源码或wrapper.h发生变化时重新运行此脚本
     println!("cargo:rerun-if-changed=depends/build/srt");
     println!("cargo:rerun-if-changed=wrapper.h");
-
-    
 
     // SRT头文件的路径
     let srt_include_path = srt_install_path.join("include");
@@ -138,7 +185,9 @@ fn main() {
         // .whitelist_type("SRT.*")
         // .whitelist_var("SRT.*")
         .bitfield_enum("SRT_EPOLL_OPT")
-        .default_enum_style(bindgen::EnumVariation::Rust { non_exhaustive: true })
+        .default_enum_style(bindgen::EnumVariation::Rust {
+            non_exhaustive: true,
+        })
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         // 忽略 IPPORT_RESERVED 的定义
         .blocklist_item("IPPORT_RESERVED")
@@ -150,5 +199,4 @@ fn main() {
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("无法写入绑定");
-
 }

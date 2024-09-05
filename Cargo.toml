@@ -10,5 +10,4 @@ libsrt-sys = { path = "libsrt-sys", version = "1.5.3" }
 nix = "0.29.0"
 [target.'cfg(windows)'.dependencies]
 windows-sys = "0.59.0"
-
-
+openssl-sys = { version = "0.9.103", features = ["vendored"] }
